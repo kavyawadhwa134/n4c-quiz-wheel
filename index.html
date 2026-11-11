@@ -353,7 +353,7 @@ canvas#confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:non
   let soundOn = store.get("n4c-wheel-sound", true);
   let rotation = 0, spinning = false, current = null, audio = null, wakeLock = null;
   const N = SLICES.length, SEG = 360 / N;
-  const WIN_WEIGHT = 0.375; // 0.375 / (9 + 0.375) = 4%, about 1 in 25 spins
+  const WIN_WEIGHT = 9 / 7; // (9/7) / (9 + 9/7) = 1/8, so 1 spin in 8
 
   // ---------- Drawing ----------
   const RING_COLORS = ["#7DC242","#5B2D6E","#E2231A","#FDB913","#4DB3E6","#3A9A3E","#C2187A","#283B84"];
@@ -445,7 +445,7 @@ canvas#confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:non
     try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume && audio.resume(); } catch (e) {}
     try { if (!wakeLock && navigator.wakeLock) navigator.wakeLock.request("screen").then(l => { wakeLock = l; l.addEventListener("release", () => wakeLock = null); }).catch(() => {}); } catch (e) {}
 
-    // WIN is rare: about 1 spin in 25. Every other slice is equally likely.
+    // WIN comes up 1 spin in 8. Every other slice is equally likely.
     const W = SLICES.map(sl => sl.id === "win" ? WIN_WEIGHT : 1);
     let r = Math.random() * W.reduce((a, b) => a + b, 0), target = 0;
     while (r >= W[target]) { r -= W[target]; target++; }
