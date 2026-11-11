@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nuclear Quiz Wheel</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&family=Cairo:wght@500;600;700;800&family=Noto+Sans+SC:wght@500;700;900&display=swap">
+<style>
+/* Layout: one column. Header, language bar, then the wheel as the hero with a SPIN hub. Results open as a full sheet the host reads from. */
+:root{
+  --bg:#F3F8FC; --surface:#FFFFFF; --fg:#1E2B5E; --muted:#5A6790; --line:#DCE6F2;
+  --navy:#283B84; --navy-deep:#18245A; --sky:#4DB3E6; --sun:#FDB913; --panel:#E6F4FC;
+  --display:"Barlow Condensed","Cairo","Noto Sans SC","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow","Cairo","Noto Sans SC","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--bg)}
+body{color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.4;margin:0;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  -webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
+.wrap{max-width:560px;margin:0 auto;overflow-x:clip;padding-block:10px 28px;display:flex;flex-direction:column;gap:12px}
+h1,h2{margin:0;text-wrap:balance}
+p{margin:0}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
+button:focus-visible{outline:3px solid var(--sky);outline-offset:3px}
+
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px}
+.brand{display:flex;align-items:center;gap:8px;font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:16px;line-height:1;color:var(--navy);direction:ltr;text-align:left}
+.brand b{color:var(--sky);font-weight:700}
+.brand svg{width:34px;height:34px}
+.icon-btn{width:44px;height:44px;border-radius:50%;border:1.5px solid var(--line);background:var(--surface);display:grid;place-items:center;color:var(--navy)}
+.icon-btn svg{width:22px;height:22px}
+
+.langs{display:grid;grid-template-columns:repeat(5,1fr);background:var(--surface);border:1.5px solid var(--line);border-radius:999px;padding:3px;gap:2px;direction:ltr}
+.langs button{border:0;background:none;min-height:38px;border-radius:999px;font-weight:600;font-size:15px;color:var(--muted)}
+.langs button[aria-pressed="true"]{background:var(--navy);color:#fff}
+.langs.in-card{margin-top:-4px}
+.qtext,.answer{transition:opacity .15s}
+.swap .qtext,.swap .answer,.swap .special{opacity:0}
+
+.intro{text-align:center;display:flex;flex-direction:column;gap:4px}
+.intro h1{font-family:var(--display);font-weight:800;font-size:clamp(34px,10vw,48px);line-height:1;color:var(--navy);text-transform:uppercase;letter-spacing:.01em}
+.intro p{color:var(--muted);font-size:15.5px;max-width:34ch;margin:0 auto}
+:lang(ar) .intro h1,:lang(zh) .intro h1{line-height:1.3;font-size:clamp(30px,9vw,42px)}
+
+/* Wheel */
+.stage{position:relative;width:min(100%,56vh,520px);aspect-ratio:1/1;margin:4px auto 0;direction:ltr}
+.rot{position:absolute;inset:0;will-change:transform}
+.rot svg{width:100%;height:100%;display:block;filter:drop-shadow(0 8px 18px rgba(24,36,90,.18))}
+.pointer{position:absolute;left:50%;top:-2%;width:13%;transform:translateX(-50%);transform-origin:50% 20%;z-index:3;pointer-events:none}
+.pointer svg{width:100%;height:auto;display:block;filter:drop-shadow(0 3px 3px rgba(0,0,0,.25))}
+.pointer.tick{animation:tick .12s ease-out}
+@keyframes tick{40%{transform:translateX(-50%) rotate(-14deg)}}
+.hub{position:absolute;left:50%;top:50%;width:27%;aspect-ratio:1/1;transform:translate(-50%,-50%);border-radius:50%;border:0;z-index:2;
+  background:var(--surface);box-shadow:0 0 0 5px var(--navy),0 6px 16px rgba(24,36,90,.35);display:grid;place-items:center;padding:0}
+.hub svg{position:absolute;inset:6%;width:88%;height:88%}
+.hub span{position:relative;font-family:var(--display);font-weight:800;font-size:clamp(17px,5.4vw,26px);color:var(--navy);text-transform:uppercase;line-height:1}
+.hub:active{transform:translate(-50%,-50%) scale(.95)}
+.hub:disabled{cursor:default}
+.hint{text-align:center;font-size:14px;color:var(--muted)}
+
+.meta{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;color:var(--muted)}
+.linkish{background:none;border:0;padding:6px 4px;color:var(--navy);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.foot{text-align:center;font-size:12px;color:var(--muted)}
+
+/* Result sheet */
+.sheet{position:fixed;inset:0;z-index:30;background:rgba(24,36,90,.45);display:flex;align-items:flex-end;justify-content:center;
+  padding:max(12px,env(safe-area-inset-top,0px)) max(0px,env(safe-area-inset-right,0px)) 0 max(0px,env(safe-area-inset-left,0px))}
+.card{width:100%;max-width:600px;max-height:100%;overflow:auto;background:var(--bg);border-radius:26px 26px 0 0;
+  padding:16px max(18px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px));
+  display:flex;flex-direction:column;gap:16px;animation:up .32s cubic-bezier(.2,.8,.2,1)}
+@keyframes up{from{transform:translateY(40px);opacity:0}}
+@media (min-width:640px){.sheet{align-items:center}.card{border-radius:26px}}
+.card-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:7px 14px 7px 10px;border-radius:999px;font-weight:700;font-size:15px;color:#fff}
+.chip i{width:14px;height:14px;border-radius:50%;background:#fff;opacity:.9}
+.qtext{font-family:var(--body);font-weight:700;font-size:clamp(23px,6.4vw,30px);line-height:1.25;color:var(--navy)}
+:lang(ar) .qtext{line-height:1.55}
+.primary{border:0;background:var(--navy);color:#fff;border-radius:16px;min-height:56px;padding:0 20px;font-weight:700;font-size:18px;box-shadow:0 4px 0 var(--navy-deep)}
+.primary:active{transform:translateY(3px);box-shadow:0 1px 0 var(--navy-deep)}
+.secondary{border:2px solid var(--navy);background:var(--surface);color:var(--navy);border-radius:16px;min-height:52px;padding:0 20px;font-weight:700;font-size:17px}
+.answer{background:var(--surface);border:1.5px solid var(--line);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:8px;animation:fade .3s}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}}
+.alabel{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sky)}
+.atext{font-size:21px;font-weight:700;line-height:1.3;color:var(--fg)}
+.fact{font-size:16.5px;line-height:1.5;color:var(--fg)}
+.src{font-size:12.5px;color:var(--muted)}
+.special{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding-block:8px}
+.special svg{width:132px;height:132px}
+.special h2{font-family:var(--display);font-weight:800;font-size:46px;line-height:1.05;color:var(--navy);text-transform:uppercase}
+:lang(ar) .special h2,:lang(zh) .special h2{font-size:40px;line-height:1.3}
+.special p{font-size:18px;max-width:28ch;color:var(--fg)}
+.special.win svg{animation:bounce 1s ease-in-out infinite alternate}
+@keyframes bounce{to{transform:translateY(-8px) rotate(4deg)}}
+canvas#confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:40}
+
+@media (prefers-reduced-motion: reduce){
+  .card,.answer,.special.win svg,.pointer.tick{animation:none}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 200 200" aria-hidden="true" id="miniRings"></svg>
+      <span><b>Nuclear for</b><br>CLIMATE</span>
+    </div>
+    <button class="icon-btn" type="button" id="sound" aria-pressed="true"></button>
+  </header>
+
+  <div class="langs" role="group" aria-label="Language">
+    <button type="button" id="l-en" data-lang="en" lang="en">EN</button>
+    <button type="button" id="l-tr" data-lang="tr" lang="tr">TR</button>
+    <button type="button" id="l-ar" data-lang="ar" lang="ar">عربي</button>
+    <button type="button" id="l-fr" data-lang="fr" lang="fr">FR</button>
+    <button type="button" id="l-zh" data-lang="zh" lang="zh">中文</button>
+  </div>
+
+  <div class="intro">
+    <h1 data-t="title"></h1>
+    <p data-t="sub"></p>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="pointer" id="pointer" aria-hidden="true">
+      <svg viewBox="0 0 40 52"><path d="M20 50 L4 14 A17 17 0 1 1 36 14 Z" fill="#283B84"/><circle cx="20" cy="17" r="7" fill="#FDB913"/></svg>
+    </div>
+    <div class="rot" id="rot"><svg viewBox="-110 -110 220 220" id="wheel" aria-hidden="true"></svg></div>
+    <button class="hub" type="button" id="hub"><svg viewBox="0 0 200 200" id="hubRings" aria-hidden="true"></svg><span data-t="spin"></span></button>
+  </div>
+  <p class="hint" data-t="hint"></p>
+
+  <div class="meta">
+    <span id="asked"></span>
+    <button class="linkish" type="button" id="restart" data-t="restart"></button>
+  </div>
+  <p class="foot">Nuclear for Climate · COP31 Türkiye</p>
+</div>
+
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="card">
+    <div class="card-top">
+      <span class="chip" id="chip"><i></i><span id="chipText"></span></span>
+      <button class="icon-btn" type="button" id="close" aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="langs in-card" role="group" aria-label="Language">
+      <button type="button" data-lang="en" lang="en">EN</button>
+      <button type="button" data-lang="tr" lang="tr">TR</button>
+      <button type="button" data-lang="ar" lang="ar">عربي</button>
+      <button type="button" data-lang="fr" lang="fr">FR</button>
+      <button type="button" data-lang="zh" lang="zh">中文</button>
+    </div>
+    <div id="qView">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <h2 class="qtext" id="sheetTitle"></h2>
+        <button class="primary" type="button" id="reveal" data-t="show"></button>
+        <div class="answer" id="answer" hidden>
+          <p class="alabel" data-t="answer"></p>
+          <p class="atext" id="aText"></p>
+          <p class="fact" id="fText"></p>
+          <p class="src" id="sText"></p>
+        </div>
+      </div>
+    </div>
+    <div class="special" id="spView" hidden>
+      <div id="spIcon"></div>
+      <h2 id="spTitle"></h2>
+      <p id="spText"></p>
+    </div>
+    <button class="secondary" type="button" id="next" data-t="next"></button>
+  </div>
+</div>
+<canvas id="confetti" hidden></canvas>
+
+<script>
+(() => {
+  // ---------- Wheel slices (8 topics from the host sheet + Spin again + Win) ----------
+  const SLICES = [
+    { id: "energy",      color: "#E2231A", ink: "#FFFFFF" },
+    { id: "water",       color: "#4DB3E6", ink: "#16235A" },
+    { id: "win",         color: "#FDB913", ink: "#16235A" },
+    { id: "minerals",    color: "#5B2D6E", ink: "#FFFFFF" },
+    { id: "sustain",     color: "#7DC242", ink: "#16235A" },
+    { id: "social",      color: "#C2187A", ink: "#FFFFFF" },
+    { id: "environment", color: "#F28C28", ink: "#16235A" },
+    { id: "economy",     color: "#283B84", ink: "#FFFFFF" },
+    { id: "again",       color: "#FFFFFF", ink: "#283B84" },
+    { id: "climate",     color: "#3A9A3E", ink: "#FFFFFF" }
+  ];
+
+  // [short wheel label, full topic name]
+  const NAMES = {
+    en: { energy:["Energy","Energy Supply"], minerals:["Minerals","Key Minerals"], climate:["Climate","Climate Impact"], social:["Society","Social Impact"], economy:["Economy","Economic Benefits"], water:["Water","Water Resources"], sustain:["Sustainability","Sustainability"], environment:["Environment","Environmental Impact"], again:["Spin again","Spin again"], win:["WIN!","WIN"] },
+    tr: { energy:["Enerji","Enerji Arzı"], minerals:["Mineraller","Kritik Mineraller"], climate:["İklim","İklim Etkisi"], social:["Toplum","Toplumsal Etki"], economy:["Ekonomi","Ekonomik Faydalar"], water:["Su","Su Kaynakları"], sustain:["Sürdürülebilirlik","Sürdürülebilirlik"], environment:["Çevre","Çevresel Etki"], again:["Tekrar çevir","Tekrar çevir"], win:["KAZAN!","KAZAN"] },
+    ar: { energy:["الطاقة","إمدادات الطاقة"], minerals:["المعادن","المعادن الأساسية"], climate:["المناخ","الأثر المناخي"], social:["المجتمع","الأثر الاجتماعي"], economy:["الاقتصاد","الفوائد الاقتصادية"], water:["المياه","الموارد المائية"], sustain:["الاستدامة","الاستدامة"], environment:["البيئة","الأثر البيئي"], again:["أدِر مجددًا","أدِر مجددًا"], win:["اربح!","اربح"] },
+    fr: { energy:["Énergie","Approvisionnement énergétique"], minerals:["Minerais","Minerais clés"], climate:["Climat","Impact climatique"], social:["Société","Impact social"], economy:["Économie","Bénéfices économiques"], water:["Eau","Ressources en eau"], sustain:["Durabilité","Durabilité"], environment:["Environnement","Impact environnemental"], again:["Relancez","Relancez"], win:["GAGNÉ !","GAGNÉ"] },
+    zh: { energy:["能源供应","能源供应"], minerals:["关键矿产","关键矿产"], climate:["气候影响","气候影响"], social:["社会影响","社会影响"], economy:["经济效益","经济效益"], water:["水资源","水资源"], sustain:["可持续性","可持续性"], environment:["环境影响","环境影响"], again:["再转一次","再转一次"], win:["赢奖！","赢奖"] }
+  };
+
+  const UI = {
+    en: { title:"Spin the wheel", sub:"Spin for a topic, then answer a question about nuclear energy.", spin:"Spin", hint:"Tap the centre to spin.", show:"Show answer", answer:"Answer", source:"Source", next:"Spin again", restart:"Start over", asked:(a,b)=>`Questions asked: ${a} of ${b}`, againT:"Spin again!", againP:"Lucky you. You get another go.", againBtn:"Spin now", winT:"You win!", winP:"Show this screen at the booth to collect your prize.", soundOn:"Sound on", soundOff:"Sound off" },
+    tr: { title:"Çarkı çevir", sub:"Bir konu için çarkı çevir, sonra nükleer enerjiyle ilgili bir soruyu yanıtla.", spin:"Çevir", hint:"Çevirmek için ortaya dokun.", show:"Cevabı göster", answer:"Cevap", source:"Kaynak", next:"Tekrar çevir", restart:"Baştan başla", asked:(a,b)=>`Sorulan sorular: ${a} / ${b}`, againT:"Bir daha çevir!", againP:"Şanslısın, bir hakkın daha var.", againBtn:"Şimdi çevir", winT:"Kazandın!", winP:"Ödülünü almak için bu ekranı standda göster.", soundOn:"Ses açık", soundOff:"Ses kapalı" },
+    ar: { title:"أدِر العجلة", sub:"أدِر العجلة لاختيار موضوع، ثم أجب عن سؤال حول الطاقة النووية.", spin:"أدِر", hint:"اضغط على المنتصف لتدوير العجلة.", show:"أظهِر الإجابة", answer:"الإجابة", source:"المصدر", next:"أدِر مرة أخرى", restart:"ابدأ من جديد", asked:(a,b)=>`الأسئلة المطروحة: ${a} من ${b}`, againT:"أدِر مرة أخرى!", againP:"حظك جيد، لديك فرصة أخرى.", againBtn:"أدِر الآن", winT:"لقد فزت!", winP:"اعرض هذه الشاشة في الجناح لاستلام جائزتك.", soundOn:"الصوت مفعّل", soundOff:"الصوت مغلق" },
+    fr: { title:"Tournez la roue", sub:"Tournez la roue pour tirer un thème, puis répondez à une question sur l'énergie nucléaire.", spin:"Tourner", hint:"Touchez le centre pour lancer la roue.", show:"Voir la réponse", answer:"Réponse", source:"Source", next:"Relancer la roue", restart:"Recommencer", asked:(a,b)=>`Questions posées : ${a} sur ${b}`, againT:"Relancez !", againP:"Quelle chance ! Vous avez droit à un autre essai.", againBtn:"Relancer", winT:"Gagné !", winP:"Montrez cet écran au stand pour récupérer votre cadeau.", soundOn:"Son activé", soundOff:"Son coupé" },
+    zh: { title:"转动转盘", sub:"转动转盘抽取一个主题，然后回答一个关于核能的问题。", spin:"开始", hint:"点击中间开始转动。", show:"显示答案", answer:"答案", source:"来源", next:"再转一次", restart:"重新开始", asked:(a,b)=>`已提问：${a} / ${b}`, againT:"再转一次！", againP:"运气不错，你还有一次机会。", againBtn:"马上转", winT:"你赢了！", winP:"请向展台工作人员出示此屏幕领取奖品。", soundOn:"声音开", soundOff:"声音关" }
+  };
+
+  const SOURCES = { 1:"US EIA", 2:"Türkiye Ministry of Energy and Natural Resources", 3:"US Department of Energy", 4:"IAEA", 5:"IEA", 6:"UK Government", 7:"IAEA", 8:"US EIA", 9:"Environment Agency (UK)", 10:"US NRC", 11:"US NRC" };
+
+  // ---------- The 20 questions from the host sheet: [question, answer, short explanation] ----------
+  const Q = [
+    { id:1, topic:"energy", src:[1],
+      en:["Can a nuclear power plant generate electricity both during the day and at night?","Yes.","It can operate around the clock, with planned stops for maintenance and refuelling."],
+      tr:["Bir nükleer santral hem gündüz hem gece elektrik üretebilir mi?","Evet.","Bakım ve yakıt değişimi için planlı duruşlar dışında günün her saatinde çalışabilir."],
+      ar:["هل تستطيع محطة الطاقة النووية توليد الكهرباء ليلًا ونهارًا؟","نعم.","يمكنها العمل على مدار الساعة، مع توقفات مخطط لها للصيانة وإعادة التزود بالوقود."],
+      fr:["Une centrale nucléaire peut-elle produire de l'électricité le jour comme la nuit ?","Oui.","Elle peut fonctionner en continu, avec des arrêts programmés pour la maintenance et le rechargement du combustible."],
+      zh:["核电站能不能白天和夜里都发电？","能。","核电站可以全天候运行，只在维护和换料时按计划停机。"] },
+    { id:2, topic:"energy", src:[1],
+      en:["What happens inside a nuclear reactor to release the heat used to generate electricity?","Atoms split apart. This is called nuclear fission.","The heat is used to make steam that drives a turbine."],
+      tr:["Elektrik üretmek için kullanılan ısıyı açığa çıkarmak üzere nükleer reaktörün içinde ne olur?","Atomlar bölünür. Buna nükleer fisyon denir.","Açığa çıkan ısı, bir türbini döndüren buharı üretmek için kullanılır."],
+      ar:["ماذا يحدث داخل المفاعل النووي لإطلاق الحرارة المستخدمة في توليد الكهرباء؟","تنقسم الذرات، وتُسمّى هذه العملية الانشطار النووي.","تُستخدم الحرارة لإنتاج بخار يدير توربينًا."],
+      fr:["Que se passe-t-il dans un réacteur nucléaire pour libérer la chaleur qui sert à produire de l'électricité ?","Des atomes se cassent en deux. C'est la fission nucléaire.","La chaleur sert à produire de la vapeur qui fait tourner une turbine."],
+      zh:["核反应堆内部发生了什么，才释放出用来发电的热量？","原子发生分裂，这叫做核裂变。","这些热量用来产生蒸汽，推动汽轮机发电。"] },
+    { id:3, topic:"energy", src:[2],
+      en:["What is the name of Türkiye's first nuclear power plant project?","Akkuyu.","It is located in Mersin province, on the Mediterranean coast."],
+      tr:["Türkiye'nin ilk nükleer santral projesinin adı nedir?","Akkuyu.","Akdeniz kıyısında, Mersin ilinde yer alır."],
+      ar:["ما اسم أول مشروع لمحطة طاقة نووية في تركيا؟","أك كويو (Akkuyu).","تقع في ولاية مرسين على ساحل البحر الأبيض المتوسط."],
+      fr:["Quel est le nom du premier projet de centrale nucléaire de Türkiye ?","Akkuyu.","Elle se trouve dans la province de Mersin, sur la côte méditerranéenne."],
+      zh:["土耳其第一个核电站项目叫什么名字？","阿库尤（Akkuyu）。","它位于地中海沿岸的梅尔辛省。"] },
+    { id:4, topic:"minerals", src:[1],
+      en:["Which metal is used as fuel in most nuclear power reactors?","Uranium.","It is processed into fuel for the reactor."],
+      tr:["Çoğu nükleer reaktörde yakıt olarak hangi metal kullanılır?","Uranyum.","Reaktörde kullanılacak yakıta dönüştürülmek üzere işlenir."],
+      ar:["ما المعدن المستخدم وقودًا في معظم المفاعلات النووية؟","اليورانيوم.","تتم معالجته ليصبح وقودًا للمفاعل."],
+      fr:["Quel métal sert de combustible dans la plupart des réacteurs nucléaires ?","L'uranium.","Il est transformé en combustible pour le réacteur."],
+      zh:["大多数核反应堆用哪种金属作燃料？","铀。","铀经过加工后制成反应堆燃料。"] },
+    { id:5, topic:"minerals", src:[1,3],
+      en:["Is uranium found naturally in the Earth, or is it only made in laboratories?","It is found naturally in the Earth.","Uranium is extracted from deposits and processed to make nuclear fuel."],
+      tr:["Uranyum doğada, yer kabuğunda bulunur mu, yoksa yalnızca laboratuvarlarda mı üretilir?","Doğada, yer kabuğunda bulunur.","Uranyum yataklardan çıkarılır ve nükleer yakıt yapmak için işlenir."],
+      ar:["هل يوجد اليورانيوم في الأرض بشكل طبيعي، أم يُصنع في المختبرات فقط؟","يوجد في الأرض بشكل طبيعي.","يُستخرج اليورانيوم من الرواسب ثم يُعالَج لصنع الوقود النووي."],
+      fr:["L'uranium se trouve-t-il à l'état naturel dans la Terre, ou est-il seulement fabriqué en laboratoire ?","Il se trouve à l'état naturel dans la Terre.","L'uranium est extrait de gisements, puis transformé en combustible nucléaire."],
+      zh:["铀是地球上天然存在的，还是只能在实验室里制造？","铀是地球上天然存在的。","铀从矿床中开采出来，再加工成核燃料。"] },
+    { id:6, topic:"climate", src:[4],
+      en:["Is nuclear electricity usually described as low carbon or high carbon?","Low carbon.","Its greenhouse gas emissions are low across its life cycle, including construction, fuel production and operation."],
+      tr:["Nükleer elektrik genellikle düşük karbonlu mu, yüksek karbonlu mu olarak tanımlanır?","Düşük karbonlu.","İnşaat, yakıt üretimi ve işletme dahil tüm yaşam döngüsü boyunca sera gazı emisyonları düşüktür."],
+      ar:["هل توصف الكهرباء النووية عادةً بأنها منخفضة الكربون أم مرتفعة الكربون؟","منخفضة الكربون.","انبعاثاتها من غازات الدفيئة منخفضة على امتداد دورة حياتها، بما في ذلك البناء وإنتاج الوقود والتشغيل."],
+      fr:["L'électricité nucléaire est-elle généralement qualifiée de bas carbone ou de haut carbone ?","Bas carbone.","Ses émissions de gaz à effet de serre sont faibles sur l'ensemble de son cycle de vie, y compris la construction, la production du combustible et l'exploitation."],
+      zh:["核电通常被称为低碳还是高碳？","低碳。","在整个生命周期中，包括建设、燃料生产和运行，核电的温室气体排放都很低。"] },
+    { id:7, topic:"climate", src:[4,5],
+      en:["Can nuclear power work alongside solar, wind and hydropower in a low-carbon energy system?","Yes.","These technologies can contribute together to a reliable, low-carbon electricity supply."],
+      tr:["Nükleer enerji, düşük karbonlu bir enerji sisteminde güneş, rüzgâr ve hidroelektrikle birlikte çalışabilir mi?","Evet.","Bu teknolojiler birlikte güvenilir ve düşük karbonlu bir elektrik arzına katkı sağlayabilir."],
+      ar:["هل يمكن للطاقة النووية أن تعمل جنبًا إلى جنب مع الطاقة الشمسية وطاقة الرياح والطاقة الكهرومائية في نظام طاقة منخفض الكربون؟","نعم.","يمكن لهذه التقنيات أن تسهم معًا في إمداد كهربائي موثوق ومنخفض الكربون."],
+      fr:["Le nucléaire peut-il fonctionner aux côtés du solaire, de l'éolien et de l'hydroélectricité dans un système énergétique bas carbone ?","Oui.","Ensemble, ces technologies peuvent contribuer à un approvisionnement en électricité fiable et bas carbone."],
+      zh:["在低碳能源系统中，核电能否与太阳能、风能和水电一起发挥作用？","能。","这些技术可以共同提供可靠的低碳电力。"] },
+    { id:8, topic:"climate", src:[4],
+      en:["Besides electricity, what useful form of energy can nuclear power supply to buildings or factories?","Heat.","Nuclear energy can supply heat for buildings and industrial processes, helping reduce emissions from these activities."],
+      tr:["Nükleer enerji, elektriğin yanı sıra binalara veya fabrikalara hangi yararlı enerji türünü sağlayabilir?","Isı.","Nükleer enerji binalar ve sanayi süreçleri için ısı sağlayarak bu faaliyetlerden kaynaklanan emisyonların azaltılmasına yardımcı olabilir."],
+      ar:["إلى جانب الكهرباء، ما الشكل المفيد الآخر من الطاقة الذي يمكن للطاقة النووية توفيره للمباني أو المصانع؟","الحرارة.","يمكن للطاقة النووية توفير الحرارة للمباني والعمليات الصناعية، مما يساعد على خفض انبعاثات هذه الأنشطة."],
+      fr:["En plus de l'électricité, quelle autre forme d'énergie utile le nucléaire peut-il fournir aux bâtiments ou aux usines ?","De la chaleur.","L'énergie nucléaire peut fournir de la chaleur aux bâtiments et aux procédés industriels, ce qui aide à réduire les émissions de ces activités."],
+      zh:["除了电力，核能还能为建筑或工厂提供哪种有用的能源？","热能。","核能可以为建筑供暖和工业生产供热，帮助减少这些活动的排放。"] },
+    { id:9, topic:"social", src:[6],
+      en:["Do you have to be a nuclear scientist to work in the nuclear industry?","No.","The industry also needs electricians, welders, builders, IT specialists, administrators and many other skills."],
+      tr:["Nükleer sektörde çalışmak için nükleer bilimci olmak gerekir mi?","Hayır.","Sektörün elektrikçilere, kaynakçılara, inşaat çalışanlarına, bilişim uzmanlarına, idari personele ve daha birçok beceriye de ihtiyacı vardır."],
+      ar:["هل يجب أن تكون عالِمًا نوويًا لتعمل في الصناعة النووية؟","لا.","تحتاج الصناعة أيضًا إلى كهربائيين ولحّامين وعمال بناء ومتخصصين في تقنية المعلومات وإداريين ومهارات أخرى كثيرة."],
+      fr:["Faut-il être scientifique nucléaire pour travailler dans l'industrie nucléaire ?","Non.","L'industrie a aussi besoin d'électriciens, de soudeurs, d'ouvriers du bâtiment, de spécialistes informatiques, d'administratifs et de bien d'autres compétences."],
+      zh:["在核工业工作一定要是核科学家吗？","不一定。","这个行业还需要电工、焊工、建筑工人、IT专业人员、行政人员以及许多其他技能的人才。"] },
+    { id:10, topic:"social", src:[7],
+      en:["Should local communities have opportunities to ask questions and share their views about a nuclear project?","Yes.","Community involvement helps people understand the project and allows their views and concerns to inform decisions."],
+      tr:["Yerel topluluklar bir nükleer proje hakkında soru sorma ve görüşlerini paylaşma fırsatına sahip olmalı mı?","Evet.","Topluluk katılımı, insanların projeyi anlamasına yardımcı olur ve görüş ve kaygılarının kararlara yansımasını sağlar."],
+      ar:["هل ينبغي أن تتاح للمجتمعات المحلية فرص لطرح الأسئلة وإبداء آرائها حول مشروع نووي؟","نعم.","تساعد مشاركة المجتمع الناس على فهم المشروع، وتتيح لآرائهم ومخاوفهم أن تُؤخذ في الاعتبار عند اتخاذ القرارات."],
+      fr:["Les communautés locales doivent-elles pouvoir poser des questions et donner leur avis sur un projet nucléaire ?","Oui.","La participation des habitants les aide à comprendre le projet et permet à leurs avis et préoccupations d'éclairer les décisions."],
+      zh:["当地社区是否应该有机会就核电项目提问并表达意见？","应该。","社区参与能帮助人们了解项目，也能让他们的意见和关切为决策提供参考。"] },
+    { id:11, topic:"economy", src:[6],
+      en:["Name one type of local business that could benefit from a nuclear power project.","Examples: construction firms, equipment suppliers, transport businesses and catering companies.","Accept any suitable example."],
+      tr:["Bir nükleer santral projesinden fayda sağlayabilecek bir yerel işletme türü söyleyin.","Örnekler: inşaat firmaları, ekipman tedarikçileri, nakliye işletmeleri ve yemek hizmeti şirketleri.","Uygun her örneği kabul edin."],
+      ar:["اذكر نوعًا واحدًا من الأعمال المحلية التي يمكن أن تستفيد من مشروع محطة نووية.","أمثلة: شركات البناء، وموردو المعدات، وشركات النقل، وشركات تقديم الطعام.","اقبل أي مثال مناسب."],
+      fr:["Citez un type d'entreprise locale qui pourrait bénéficier d'un projet de centrale nucléaire.","Par exemple : entreprises de construction, fournisseurs d'équipements, entreprises de transport, traiteurs.","Acceptez tout exemple pertinent."],
+      zh:["说出一种可能从核电项目中受益的本地企业。","例如：建筑公司、设备供应商、运输企业和餐饮公司。","任何合理的例子都可以接受。"] },
+    { id:12, topic:"economy", src:[5],
+      en:["Can nuclear power help a country reduce its need to import fossil fuels?","Yes.","Nuclear generation can reduce the need for imported fossil fuels used to produce electricity. Nuclear fuel may still be imported."],
+      tr:["Nükleer enerji, bir ülkenin fosil yakıt ithalatı ihtiyacını azaltmasına yardımcı olabilir mi?","Evet.","Nükleer üretim, elektrik üretiminde kullanılan ithal fosil yakıt ihtiyacını azaltabilir. Nükleer yakıt yine de ithal edilebilir."],
+      ar:["هل يمكن للطاقة النووية أن تساعد بلدًا ما على تقليل حاجته إلى استيراد الوقود الأحفوري؟","نعم.","يمكن للتوليد النووي أن يقلل الحاجة إلى الوقود الأحفوري المستورد لإنتاج الكهرباء، وإن كان الوقود النووي نفسه قد يُستورد."],
+      fr:["Le nucléaire peut-il aider un pays à réduire ses importations de combustibles fossiles ?","Oui.","La production nucléaire peut réduire le besoin de combustibles fossiles importés pour produire de l'électricité. Le combustible nucléaire peut toutefois être importé."],
+      zh:["核电能否帮助一个国家减少对进口化石燃料的需求？","能。","核能发电可以减少发电所需的进口化石燃料。不过，核燃料本身可能仍需进口。"] },
+    { id:13, topic:"water", src:[1,8],
+      en:["What is one important job that water does in many nuclear power plants?","Cooling.","Water helps remove heat, including cooling steam so it can be turned back into water and reused."],
+      tr:["Birçok nükleer santralde suyun yaptığı önemli bir görev nedir?","Soğutma.","Su, ısının uzaklaştırılmasına yardımcı olur; buharı soğutarak yeniden suya dönüştürür ve tekrar kullanılmasını sağlar."],
+      ar:["ما المهمة المهمة التي يؤديها الماء في كثير من محطات الطاقة النووية؟","التبريد.","يساعد الماء على إزالة الحرارة، ومن ذلك تبريد البخار ليعود ماءً ويُعاد استخدامه."],
+      fr:["Quel est un rôle important de l'eau dans de nombreuses centrales nucléaires ?","Le refroidissement.","L'eau aide à évacuer la chaleur, notamment en refroidissant la vapeur pour la retransformer en eau et la réutiliser."],
+      zh:["在许多核电站中，水承担着哪一项重要工作？","冷却。","水帮助带走热量，包括冷却蒸汽，使其重新变成水并循环使用。"] },
+    { id:14, topic:"water", src:[8,9],
+      en:["Can a coastal nuclear power plant use seawater for cooling?","Yes.","Suitable coastal plants can use seawater in their cooling systems, with measures to protect the marine environment."],
+      tr:["Kıyıdaki bir nükleer santral soğutma için deniz suyu kullanabilir mi?","Evet.","Uygun kıyı santralleri, deniz ortamını korumaya yönelik önlemlerle soğutma sistemlerinde deniz suyu kullanabilir."],
+      ar:["هل يمكن لمحطة نووية ساحلية استخدام مياه البحر للتبريد؟","نعم.","يمكن للمحطات الساحلية المناسبة استخدام مياه البحر في أنظمة التبريد، مع اتخاذ تدابير لحماية البيئة البحرية."],
+      fr:["Une centrale nucléaire située sur la côte peut-elle utiliser l'eau de mer pour son refroidissement ?","Oui.","Les centrales côtières adaptées peuvent utiliser l'eau de mer dans leurs systèmes de refroidissement, avec des mesures pour protéger le milieu marin."],
+      zh:["沿海核电站可以用海水来冷却吗？","可以。","条件合适的沿海核电站可以在冷却系统中使用海水，同时采取措施保护海洋环境。"] },
+    { id:15, topic:"water", src:[4],
+      en:["Can nuclear energy help turn seawater into fresh water?","Yes.","It can provide heat or electricity for desalination, which removes salt from seawater."],
+      tr:["Nükleer enerji deniz suyunu tatlı suya dönüştürmeye yardımcı olabilir mi?","Evet.","Deniz suyundaki tuzu ayıran tuzdan arındırma işlemi için ısı veya elektrik sağlayabilir."],
+      ar:["هل يمكن للطاقة النووية أن تساعد في تحويل مياه البحر إلى مياه عذبة؟","نعم.","يمكنها توفير الحرارة أو الكهرباء لتحلية المياه، أي إزالة الملح من مياه البحر."],
+      fr:["L'énergie nucléaire peut-elle aider à transformer l'eau de mer en eau douce ?","Oui.","Elle peut fournir de la chaleur ou de l'électricité pour le dessalement, qui retire le sel de l'eau de mer."],
+      zh:["核能能帮助把海水变成淡水吗？","能。","核能可以为海水淡化提供热能或电力，去除海水中的盐分。"] },
+    { id:16, topic:"sustain", src:[3],
+      en:["Can some of the material in used nuclear fuel be recycled into new fuel?","Yes.","Some countries recover and reuse materials from used fuel. Recycling does not remove the need to manage and dispose of radioactive waste."],
+      tr:["Kullanılmış nükleer yakıttaki malzemenin bir kısmı yeni yakıta dönüştürülebilir mi?","Evet.","Bazı ülkeler kullanılmış yakıttaki malzemeleri geri kazanıp yeniden kullanır. Geri dönüşüm, radyoaktif atıkların yönetilmesi ve bertaraf edilmesi ihtiyacını ortadan kaldırmaz."],
+      ar:["هل يمكن إعادة تدوير بعض مواد الوقود النووي المستهلك وتحويلها إلى وقود جديد؟","نعم.","تستعيد بعض الدول مواد من الوقود المستهلك وتعيد استخدامها. لكن إعادة التدوير لا تلغي الحاجة إلى إدارة النفايات المشعة والتخلص منها."],
+      fr:["Une partie des matières contenues dans le combustible nucléaire usé peut-elle être recyclée en nouveau combustible ?","Oui.","Certains pays récupèrent et réutilisent des matières issues du combustible usé. Le recyclage ne supprime pas la nécessité de gérer et de stocker les déchets radioactifs."],
+      zh:["乏燃料中的部分材料能否回收再制成新燃料？","能。","一些国家会从乏燃料中回收并再利用材料。但回收利用并不能免除管理和处置放射性废物的需要。"] },
+    { id:17, topic:"sustain", src:[5],
+      en:["Can an existing nuclear power plant keep generating electricity for longer if it meets the required safety standards?","Yes.","With maintenance, upgrades and regulatory approval, some plants can extend their operating lives and continue supplying low-carbon electricity."],
+      tr:["Mevcut bir nükleer santral, gerekli güvenlik standartlarını karşılıyorsa daha uzun süre elektrik üretmeye devam edebilir mi?","Evet.","Bakım, iyileştirmeler ve düzenleyici onayla bazı santraller işletme ömürlerini uzatıp düşük karbonlu elektrik sağlamaya devam edebilir."],
+      ar:["هل يمكن لمحطة نووية قائمة أن تستمر في توليد الكهرباء لفترة أطول إذا استوفت معايير السلامة المطلوبة؟","نعم.","بفضل الصيانة والتحديثات وموافقة الجهات الرقابية، يمكن لبعض المحطات تمديد عمرها التشغيلي ومواصلة إمداد الكهرباء منخفضة الكربون."],
+      fr:["Une centrale nucléaire existante peut-elle produire de l'électricité plus longtemps si elle respecte les normes de sûreté requises ?","Oui.","Grâce à la maintenance, aux améliorations et à l'autorisation de l'autorité de sûreté, certaines centrales peuvent prolonger leur durée de fonctionnement et continuer à fournir une électricité bas carbone."],
+      zh:["现有核电站如果符合安全标准，能否延长发电年限？","能。","通过维护、升级并获得监管部门批准，一些核电站可以延长运行寿命，继续提供低碳电力。"] },
+    { id:18, topic:"environment", src:[10],
+      en:["What is the white cloud sometimes seen above a nuclear plant's cooling tower?","Water droplets formed when warm, moist air cools, like a cloud.","It is not smoke from burning fuel. Not every nuclear plant has cooling towers."],
+      tr:["Nükleer santralin soğutma kulesinin üzerinde bazen görülen beyaz bulut nedir?","Sıcak ve nemli hava soğuduğunda oluşan su damlacıkları; tıpkı bir bulut gibi.","Yakıt yanmasından çıkan duman değildir. Her nükleer santralde soğutma kulesi bulunmaz."],
+      ar:["ما السحابة البيضاء التي تُرى أحيانًا فوق برج التبريد في المحطة النووية؟","قطرات ماء تتكوّن عندما يبرد الهواء الدافئ الرطب، تمامًا كالسحاب.","ليست دخانًا ناتجًا عن احتراق الوقود. وليست كل المحطات النووية مزوّدة بأبراج تبريد."],
+      fr:["Quel est le nuage blanc que l'on voit parfois au-dessus de la tour de refroidissement d'une centrale nucléaire ?","Des gouttelettes d'eau qui se forment quand de l'air chaud et humide se refroidit, comme un nuage.","Ce n'est pas de la fumée de combustion. Toutes les centrales nucléaires n'ont pas de tours de refroidissement."],
+      zh:["核电站冷却塔上方有时出现的白色云团是什么？","温暖潮湿的空气冷却后形成的小水滴，就像云一样。","它不是燃烧燃料产生的烟。而且并非每座核电站都有冷却塔。"] },
+    { id:19, topic:"environment", src:[9],
+      en:["Why are fish and other aquatic life considered when designing a nuclear plant's cooling-water system?","To protect local ecosystems.","Cooling-water systems need measures to reduce harm to aquatic life."],
+      tr:["Bir nükleer santralin soğutma suyu sistemi tasarlanırken balıklar ve diğer sucul canlılar neden dikkate alınır?","Yerel ekosistemleri korumak için.","Soğutma suyu sistemlerinde sucul canlılara verilen zararı azaltacak önlemler gerekir."],
+      ar:["لماذا تُؤخذ الأسماك والكائنات المائية الأخرى في الاعتبار عند تصميم نظام مياه التبريد في المحطة النووية؟","لحماية النظم البيئية المحلية.","تحتاج أنظمة مياه التبريد إلى تدابير تقلل الضرر على الحياة المائية."],
+      fr:["Pourquoi tient-on compte des poissons et des autres espèces aquatiques lors de la conception du système d'eau de refroidissement d'une centrale ?","Pour protéger les écosystèmes locaux.","Les systèmes d'eau de refroidissement doivent prévoir des mesures pour limiter les dommages à la vie aquatique."],
+      zh:["设计核电站冷却水系统时，为什么要考虑鱼类和其他水生生物？","为了保护当地生态系统。","冷却水系统需要采取措施，减少对水生生物的伤害。"] },
+    { id:20, topic:"environment", src:[11],
+      en:["What is the process of safely taking a nuclear power plant out of service called?","Decommissioning.","It includes safely dismantling equipment and managing radioactive materials and waste."],
+      tr:["Bir nükleer santralin güvenli bir şekilde hizmetten çıkarılması sürecine ne ad verilir?","Söküm (işletmeden çıkarma).","Ekipmanın güvenli bir şekilde sökülmesini ve radyoaktif malzemelerle atıkların yönetilmesini kapsar."],
+      ar:["ماذا تُسمّى عملية إخراج محطة طاقة نووية من الخدمة بأمان؟","الإيقاف النهائي والتفكيك.","تشمل تفكيك المعدات بأمان وإدارة المواد والنفايات المشعة."],
+      fr:["Comment appelle-t-on le processus qui consiste à mettre une centrale nucléaire hors service en toute sécurité ?","Le démantèlement.","Il comprend le démontage sûr des équipements et la gestion des matières et déchets radioactifs."],
+      zh:["安全地让核电站停止运行的过程叫什么？","退役。","包括安全拆除设备以及管理放射性材料和废物。"] }
+  ];
+
+  // ---------- State ----------
+  const $ = id => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  };
+  const sys = (navigator.language || "").toLowerCase();
+  const guess = ["tr","ar","fr","zh"].find(l => sys.startsWith(l)) || "en";
+  let lang = store.get("n4c-wheel-lang", guess); if (!UI[lang]) lang = guess;
+  let used = store.get("n4c-wheel-used", []);      // question ids already asked
+  let soundOn = store.get("n4c-wheel-sound", true);
+  let rotation = 0, spinning = false, current = null, audio = null, wakeLock = null;
+  const N = SLICES.length, SEG = 360 / N;
+
+  // ---------- Drawing ----------
+  const RING_COLORS = ["#7DC242","#5B2D6E","#E2231A","#FDB913","#4DB3E6","#3A9A3E","#C2187A","#283B84"];
+  function rings(svg, sw) {
+    const s = [[-4,-6,90,88,20],[2,-3,93,90,-35],[3,2,90,92,60],[5,-2,92,89,10],[-2,1,94,92,-10],[-3,3,89,90,45],[-5,4,88,91,-60],[4,5,91,93,80]];
+    svg.innerHTML = s.map((e, i) => `<ellipse cx="${100+e[0]}" cy="${100+e[1]}" rx="${e[2]}" ry="${e[3]}" transform="rotate(${e[4]} 100 100)" fill="none" stroke="${RING_COLORS[i]}" stroke-width="${sw}"/>`).join("");
+  }
+  const pt = (r, deg) => { const a = (deg - 90) * Math.PI / 180; return [r * Math.cos(a), r * Math.sin(a)]; };
+
+  function buildWheel() {
+    const R = 100;
+    let s = `<circle r="108" fill="#283B84"/>`;
+    SLICES.forEach((sl, i) => {
+      const [x0, y0] = pt(R, i * SEG), [x1, y1] = pt(R, (i + 1) * SEG);
+      s += `<path d="M0 0 L${x0.toFixed(2)} ${y0.toFixed(2)} A${R} ${R} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)} Z" fill="${sl.color}" stroke="#283B84" stroke-width="1.2"/>`;
+    });
+    // rim lights
+    for (let k = 0; k < N * 2; k++) {
+      const [x, y] = pt(104, k * SEG / 2);
+      s += `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="2.3" fill="${k % 2 ? "#FFFFFF" : "#FDB913"}"/>`;
+    }
+    s += `<g id="labels"></g>`;
+    $("wheel").innerHTML = s;
+    buildLabels();
+  }
+  function buildLabels() {
+    const g = $("labels"), R = 100;
+    g.innerHTML = SLICES.map((sl, i) => {
+      const ang = i * SEG + SEG / 2 - 90;
+      const flip = ang > 90 && ang < 270 ? ` transform="rotate(180 ${R * 0.655} 0)"` : "";
+      return `<g transform="rotate(${ang})"><text x="${R * 0.655}" y="0"${flip} text-anchor="middle" dominant-baseline="central" fill="${sl.ink}"
+        font-family='"Barlow Condensed","Cairo","Noto Sans SC",sans-serif' font-weight="800" font-size="13"${lang === "en" || lang === "tr" || lang === "fr" ? ' letter-spacing=".3"' : ""}>${NAMES[lang][sl.id][0]}</text></g>`;
+    }).join("");
+    const max = R * 0.5;
+    g.querySelectorAll("text").forEach(t => {
+      try { const len = t.getComputedTextLength(); if (len > max) t.setAttribute("font-size", (13 * max / len).toFixed(2)); } catch (e) {}
+    });
+  }
+
+  const ICON_AGAIN = `<svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="#E6F4FC"/><path d="M28 54a23 23 0 0 0 42 10" fill="none" stroke="#283B84" stroke-width="8" stroke-linecap="round"/><path d="M72 46a23 23 0 0 0-42-10" fill="none" stroke="#4DB3E6" stroke-width="8" stroke-linecap="round"/><path d="M64 58l8 9 8-11" fill="none" stroke="#283B84" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 42l-8-9-8 11" fill="none" stroke="#4DB3E6" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const ICON_WIN = `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M30 8h40l-6 22H36z" fill="#C2187A"/><path d="M40 8h20l-4 22H44z" fill="#4DB3E6"/><circle cx="50" cy="62" r="32" fill="#FDB913"/><circle cx="50" cy="62" r="24" fill="#FFD555"/><path d="M50 44l5.3 10.9 12 1.7-8.7 8.4 2.1 11.9L50 71.3l-10.7 5.6 2.1-11.9-8.7-8.4 12-1.7z" fill="#283B84"/></svg>`;
+
+  // ---------- Text ----------
+  function applyText() {
+    const u = UI[lang];
+    document.documentElement.lang = lang === "zh" ? "zh-Hans" : lang;
+    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+    document.querySelectorAll("[data-t]").forEach(el => { const v = u[el.dataset.t]; if (typeof v === "string") el.textContent = v; });
+    document.querySelectorAll(".langs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.lang === lang));
+    $("hub").setAttribute("aria-label", u.spin);
+    $("asked").textContent = u.asked(used.length, Q.length);
+    renderSound();
+    buildLabels();
+    if (current) renderSheet(false);
+  }
+  function renderSound() {
+    const u = UI[lang];
+    $("sound").setAttribute("aria-pressed", soundOn);
+    $("sound").setAttribute("aria-label", soundOn ? u.soundOn : u.soundOff);
+    $("sound").innerHTML = soundOn
+      ? `<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`
+      : `<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+  }
+
+  // ---------- Sound ----------
+  function beep(freq, dur, vol = .06, type = "triangle", when = 0) {
+    if (!soundOn || !audio) return;
+    const t0 = audio.currentTime + when, o = audio.createOscillator(), g = audio.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+    o.connect(g).connect(audio.destination); o.start(t0); o.stop(t0 + dur + .02);
+  }
+  const fanfare = () => [523, 659, 784, 1047].forEach((f, i) => beep(f, .25, .08, "triangle", i * .11));
+
+  // ---------- Spin ----------
+  function pickQuestion(topic) {
+    const pool = Q.filter(q => q.topic === topic);
+    let fresh = pool.filter(q => !used.includes(q.id));
+    if (!fresh.length) { used = used.filter(id => !pool.some(q => q.id === id)); fresh = pool; }
+    const q = fresh[Math.floor(Math.random() * fresh.length)];
+    used.push(q.id); store.set("n4c-wheel-used", used);
+    $("asked").textContent = UI[lang].asked(used.length, Q.length);
+    return q;
+  }
+
+  function spin() {
+    if (spinning) return;
+    spinning = true; $("hub").disabled = true;
+    try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume && audio.resume(); } catch (e) {}
+    try { if (!wakeLock && navigator.wakeLock) navigator.wakeLock.request("screen").then(l => { wakeLock = l; l.addEventListener("release", () => wakeLock = null); }).catch(() => {}); } catch (e) {}
+
+    const target = Math.floor(Math.random() * N);
+    const jitter = (Math.random() - .5) * (SEG - 8);
+    const want = ((-(target * SEG + SEG / 2 + jitter)) % 360 + 360) % 360;
+    const now = ((rotation % 360) + 360) % 360;
+    rotation += 360 * 6 + ((want - now + 360) % 360);
+
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const dur = reduce ? 600 : 5200;
+    const rot = $("rot");
+    rot.style.transition = `transform ${dur}ms cubic-bezier(.12,.62,.08,1)`;
+    rot.style.transform = `rotate(${rotation}deg)`;
+
+    let last = -1;
+    const watch = () => {
+      if (!spinning) return;
+      const m = getComputedStyle(rot).transform;
+      if (m && m !== "none") {
+        const mm = new DOMMatrixReadOnly(m), ang = Math.atan2(mm.b, mm.a) * 180 / Math.PI;
+        const idx = Math.floor((((-ang) % 360) + 360) % 360 / SEG);
+        if (idx !== last) {
+          if (last !== -1) { beep(1400, .035, .05, "square"); const p = $("pointer"); p.classList.remove("tick"); void p.offsetWidth; p.classList.add("tick"); }
+          last = idx;
+        }
+      }
+      requestAnimationFrame(watch);
+    };
+    requestAnimationFrame(watch);
+
+    setTimeout(() => {
+      spinning = false; $("hub").disabled = false;
+      const sl = SLICES[target];
+      if (sl.id === "win") { current = { type: "win" }; fanfare(); confetti(); }
+      else if (sl.id === "again") { current = { type: "again" }; beep(660, .15, .07); beep(880, .2, .07, "triangle", .12); }
+      else { current = { type: "q", q: pickQuestion(sl.id), slice: sl, revealed: false }; beep(880, .18, .07); }
+      renderSheet(true);
+    }, dur + 150);
+  }
+
+  // ---------- Result sheet ----------
+  function renderSheet(open) {
+    const u = UI[lang], c = current;
+    const sl = c.type === "q" ? c.slice : SLICES.find(s => s.id === c.type);
+    $("chip").style.background = sl.color === "#FFFFFF" ? "#283B84" : sl.color;
+    $("chip").style.color = sl.ink === "#16235A" && sl.color !== "#FFFFFF" ? "#16235A" : "#FFFFFF";
+    $("chipText").textContent = NAMES[lang][sl.id][1];
+    $("qView").hidden = c.type !== "q";
+    $("spView").hidden = c.type === "q";
+    $("spView").className = "special" + (c.type === "win" ? " win" : "");
+    if (c.type === "q") {
+      const [qq, a, f] = c.q[lang];
+      $("sheetTitle").textContent = qq;
+      $("aText").textContent = a; $("fText").textContent = f;
+      const names = [...new Set(c.q.src.map(n => SOURCES[n]))];
+      $("sText").textContent = `${u.source}: ${names.join(", ")}`;
+      $("answer").hidden = !c.revealed; $("reveal").hidden = c.revealed;
+      $("next").textContent = u.next;
+    } else {
+      $("spIcon").innerHTML = c.type === "win" ? ICON_WIN : ICON_AGAIN;
+      $("spTitle").textContent = c.type === "win" ? u.winT : u.againT;
+      $("spText").textContent = c.type === "win" ? u.winP : u.againP;
+      $("next").textContent = c.type === "again" ? u.againBtn : u.next;
+    }
+    if (open) {
+      $("sheet").hidden = false;
+      document.body.style.overflow = "hidden";
+      setTimeout(() => (c.type === "q" ? $("reveal") : $("next")).focus({ preventScroll: true }), 50);
+    }
+  }
+  function closeSheet(thenSpin) {
+    $("sheet").hidden = true; document.body.style.overflow = ""; current = null;
+    if (thenSpin) setTimeout(spin, 250); else $("hub").focus({ preventScroll: true });
+  }
+
+  // ---------- Confetti ----------
+  function confetti() {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const cv = $("confetti"), ctx = cv.getContext("2d"), dpr = Math.min(2, devicePixelRatio || 1);
+    cv.hidden = false; cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; ctx.scale(dpr, dpr);
+    const parts = Array.from({ length: 160 }, () => ({
+      x: innerWidth / 2 + (Math.random() - .5) * 80, y: innerHeight * .35,
+      vx: (Math.random() - .5) * 14, vy: -Math.random() * 14 - 4, s: 6 + Math.random() * 6,
+      r: Math.random() * 6, vr: (Math.random() - .5) * .4, c: RING_COLORS[Math.floor(Math.random() * RING_COLORS.length)]
+    }));
+    const t0 = performance.now();
+    const frame = now => {
+      const t = now - t0;
+      ctx.clearRect(0, 0, innerWidth, innerHeight);
+      parts.forEach(p => { p.vy += .35; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.r += p.vr;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.globalAlpha = Math.max(0, 1 - t / 3200);
+        ctx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); ctx.restore(); });
+      if (t < 3200) requestAnimationFrame(frame); else { ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cv.width,cv.height); cv.hidden = true; }
+    };
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- Wire up ----------
+  rings($("miniRings"), 4);
+  rings($("hubRings"), 5);
+  buildWheel();
+  applyText();
+
+  $("hub").addEventListener("click", spin);
+  $("rot").addEventListener("click", spin);
+  $("reveal").addEventListener("click", () => { if (current) { current.revealed = true; renderSheet(false); $("answer").scrollIntoView({ block: "nearest", behavior: "smooth" }); } });
+  $("next").addEventListener("click", () => closeSheet(current && current.type === "again"));
+  $("close").addEventListener("click", () => closeSheet(false));
+  $("sheet").addEventListener("click", e => { if (e.target === $("sheet")) closeSheet(false); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(false); });
+  $("restart").addEventListener("click", () => { used = []; store.set("n4c-wheel-used", used); $("asked").textContent = UI[lang].asked(0, Q.length); });
+  $("sound").addEventListener("click", () => { soundOn = !soundOn; store.set("n4c-wheel-sound", soundOn); renderSound(); });
+  document.querySelectorAll(".langs button").forEach(b => b.addEventListener("click", () => {
+    if (b.dataset.lang === lang) return;
+    lang = b.dataset.lang; store.set("n4c-wheel-lang", lang);
+    const card = document.querySelector(".card");
+    if (!$("sheet").hidden && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      card.classList.add("swap"); setTimeout(() => { applyText(); card.classList.remove("swap"); }, 150);
+    } else applyText();
+  }));
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(buildLabels);
+})();
+</script>
+</body>
+</html>
